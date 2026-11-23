@@ -1,0 +1,25 @@
+{
+  "platform": "Windows-11-10.0.26300-SP0",
+  "python": "3.12.10",
+  "cpu_count": 16,
+  "corpus": {
+    "files": 252,
+    "bytes": 2103492,
+    "megabytes": 2.01,
+    "ms": 2787.0,
+    "files_per_second": 90,
+    "mb_per_second": 0.72,
+    "mean_score": 89.7
+  },
+  "big_document": {
+    "bytes": 1050320,
+    "megabytes": 1.0,
+    "parse_ms": 271.8,
+    "lint_ms": 982.6
+  },
+  "diff": {
+    "megabytes": 0.25,
+    "ms": 1498.5,
+    "changed_lines": 252
+  }
+}

@@ -1,0 +1,58 @@
+name: Bug report
+description: Something produced a wrong finding, a crash or a bad score.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please redact anything private from the prompt you
+        paste - this is a public issue.
+  - type: input
+    id: version
+    attributes:
+      label: prompt-atlas version
+      description: Output of `prompt-atlas --version`
+      placeholder: prompt-atlas 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: command
+    attributes:
+      label: Command
+      options:
+        - lint
+        - score
+        - diff
+        - report
+        - library API
+    validations:
+      required: true
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt that triggers it
+      description: The smallest file that reproduces the problem.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Paste the command output, including the exit code.
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and OS
+      placeholder: 3.12.4 on Windows 11
+    validations:
+      required: true

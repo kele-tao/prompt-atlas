@@ -1,0 +1,21 @@
+name: Pull request
+description: A focused change with tests.
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What changed and why
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I ran `pytest -q` and it is green
+          required: true
+        - label: I ran `ruff check .` and it is clean
+          required: true
+        - label: I added a test that would fail without this change
+          required: true
+        - label: I updated CHANGELOG.md

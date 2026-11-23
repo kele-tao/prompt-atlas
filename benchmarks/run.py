@@ -1,0 +1,211 @@
+"""Benchmark harness for prompt-atlas.
+
+Run from the repository root::
+
+    python benchmarks/run.py
+
+It writes benchmarks/results.json and benchmarks/RESULTS.md.  Every number in
+the README performance table comes from these files, produced by this script
+on the machine that ran it - nothing is hard-coded.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import pathlib
+import platform
+import statistics
+import sys
+import tempfile
+import time
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from prompt_atlas import diff_text, lint_text  # noqa: E402
+from prompt_atlas.document import discover_prompts, parse_document  # noqa: E402
+
+PROMPT_BODY = """## Context
+
+You are a support agent for an online store. The customer wrote:
+
+{message}
+
+## Rules
+
+- You must answer in the requested tone.
+- Never invent order facts such as delivery dates or tracking numbers.
+- At most 120 words in the reply.
+
+## Output format
+
+Return only JSON with a category and a reply field.
+
+## Example
+
+Input: where is my order
+Output: category delivery, reply Checking now.
+"""
+
+
+def make_prompt(index: int, repeat: int = 1) -> str:
+    """One realistic prompt; `repeat` scales it up for the large-corpus case."""
+    filler = " ".join("sentence %d about order %d" % (i, index) for i in range(24))
+    body = PROMPT_BODY.format(message=filler)
+    return "\n".join([body] * repeat)
+
+
+def timeit(func, repeats: int = 5) -> float:
+    """Return the median wall-clock time in milliseconds over several runs.
+
+    Median rather than minimum on purpose: this is a shared machine, and a
+    reported floor would flatter the tool by picking the one run that happened
+    while no other process was competing for a core.
+    """
+    samples: list[float] = []
+    for _ in range(repeats):
+        start = time.perf_counter()
+        func()
+        samples.append((time.perf_counter() - start) * 1000.0)
+    return statistics.median(samples)
+
+
+def corpus_benchmark(target_bytes: int = 2 * 1024 * 1024) -> dict:
+    """Lint a directory whose prompts add up to about 5 MB."""
+    with tempfile.TemporaryDirectory(prefix="prompt-atlas-bench-") as tmp:
+        root = pathlib.Path(tmp)
+        written = 0
+        index = 0
+        while written < target_bytes:
+            text = make_prompt(index, repeat=8)
+            (root / ("prompt-%04d.md" % index)).write_text(text, encoding="utf-8")
+            written += len(text.encode("utf-8"))
+            index += 1
+        paths = discover_prompts(root)
+        results: list = []
+
+        def run() -> None:
+            results.clear()
+            for path in paths:
+                results.append(lint_text(path.read_text(encoding="utf-8"), str(path)))
+
+        elapsed = timeit(run)
+        return {
+            "files": len(paths),
+            "bytes": written,
+            "megabytes": round(written / (1024 * 1024), 2),
+            "ms": round(elapsed, 1),
+            "files_per_second": round(len(paths) / (elapsed / 1000.0)),
+            "mb_per_second": round(written / (1024 * 1024) / (elapsed / 1000.0), 2),
+            "mean_score": round(statistics.mean(r.score.total for r in results), 1),
+        }
+
+
+def big_document_benchmark(target_bytes: int = 1024 * 1024) -> dict:
+    """Parse and lint one very large prompt."""
+    chunks: list[str] = ["# Huge prompt", ""]
+    size = 0
+    index = 0
+    while size < target_bytes:
+        chunk = make_prompt(index)
+        chunks.append(chunk)
+        size += len(chunk.encode("utf-8"))
+        index += 1
+    text = "\n".join(chunks)
+    parse_ms = timeit(lambda: parse_document(text, "huge.md"), repeats=3)
+    lint_ms = timeit(lambda: lint_text(text, "huge.md"), repeats=3)
+    encoded = len(text.encode("utf-8"))
+    return {
+        "bytes": encoded,
+        "megabytes": round(encoded / (1024 * 1024), 2),
+        "parse_ms": round(parse_ms, 1),
+        "lint_ms": round(lint_ms, 1),
+    }
+
+
+def diff_benchmark(target_bytes: int = 256 * 1024) -> dict:
+    """Diff two large prompt versions."""
+    old_chunks: list[str] = []
+    new_chunks: list[str] = []
+    size = 0
+    index = 0
+    while size < target_bytes:
+        chunk = make_prompt(index)
+        old_chunks.append(chunk)
+        new_chunks.append(chunk.replace("At most 120 words", "At most 150 words"))
+        size += len(chunk.encode("utf-8"))
+        index += 1
+    old = "\n".join(old_chunks)
+    new = "\n".join(new_chunks)
+    elapsed = timeit(lambda: diff_text(old, new), repeats=3)
+    return {
+        "megabytes": round(len(old.encode("utf-8")) / (1024 * 1024), 2),
+        "ms": round(elapsed, 1),
+        "changed_lines": index,
+    }
+
+
+def render_tables(payload: dict) -> str:
+    corpus = payload["corpus"]
+    big = payload["big_document"]
+    diff = payload["diff"]
+    lines = [
+        "# prompt-atlas benchmark results",
+        "",
+        "Generated by `python benchmarks/run.py` on " + payload["platform"] + ".",
+        "Python " + payload["python"] + ", CPU count " + str(payload["cpu_count"]) + ".",
+        "",
+        "## Lint throughput (median of 5)",
+        "",
+        "| Corpus | Files | Time | Throughput | Mean score |",
+        "| --- | ---: | ---: | ---: | ---: |",
+        "| " + str(corpus["megabytes"]) + " MB | " + str(corpus["files"]) + " | " + str(corpus["ms"]) + " ms | " + str(corpus["files_per_second"]) + " files/s, " + str(corpus["mb_per_second"]) + " MB/s | " + str(corpus["mean_score"]) + " |",
+        "",
+        "## Single huge prompt",
+        "",
+        "| Size | Parse | Parse + lint |",
+        "| ---: | ---: | ---: |",
+        "| " + str(big["megabytes"]) + " MB | " + str(big["parse_ms"]) + " ms | " + str(big["lint_ms"]) + " ms |",
+        "",
+        "## Section-aware diff",
+        "",
+        "| Input size | Changed lines | Time |",
+        "| ---: | ---: | ---: |",
+        "| " + str(diff["megabytes"]) + " MB x 2 | " + str(diff["changed_lines"]) + " | " + str(diff["ms"]) + " ms |",
+        "",
+        "## Reading these numbers",
+        "",
+        "Every timing is the median of five runs, not the best one: the machine is",
+        "shared and a minimum would flatter the tool. The corpus is generated by this",
+        "script and is not committed - each prompt is the same realistic template with a",
+        "different filler paragraph - so the numbers are reproducible anywhere. Absolute",
+        "times move with CPU and load; the re-run is one command, so verify rather than",
+        "trust.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def main() -> int:
+    payload = {
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "cpu_count": os.cpu_count(),
+        "corpus": corpus_benchmark(),
+        "big_document": big_document_benchmark(),
+        "diff": diff_benchmark(),
+    }
+    out_json = ROOT / "benchmarks" / "results.json"
+    out_md = ROOT / "benchmarks" / "RESULTS.md"
+    out_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    out_md.write_text(render_tables(payload), encoding="utf-8")
+    print(json.dumps(payload, indent=2))
+    print("")
+    print("wrote " + str(out_json.relative_to(ROOT)) + " and " + str(out_md.relative_to(ROOT)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

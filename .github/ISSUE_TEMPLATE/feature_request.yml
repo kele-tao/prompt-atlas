@@ -1,0 +1,38 @@
+name: Feature request
+description: A new rule, a new output format, or a better score.
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        prompt-atlas stays dependency-free and deterministic. Requests that need a
+        network call, a model or a new runtime dependency are unlikely to land.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the prompt or workflow that is badly served today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: The command, flag or rule you would expect.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example prompt and expected finding
+      description: A small before/after is the most useful thing you can give us.
+      render: markdown
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This can be implemented with the Python standard library only
+        - label: This is deterministic (same bytes in, same bytes out)
+        - label: This works offline
