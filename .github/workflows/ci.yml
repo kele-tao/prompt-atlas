@@ -17,8 +17,10 @@ jobs:
       - run: ruff check .
       - run: pytest -q
       - run: python -m prompt_atlas --help
-      - name: Lint the bundled examples (expected to find issues)
-        run: python -m prompt_atlas lint examples --no-color --json > /tmp/lint.json
+      - name: Lint the bundled examples (expected to find issues, exit 1)
+        run: python -m prompt_atlas lint examples --no-color --json > /tmp/lint.json || true
+      - name: Assert the JSON report is valid
+        run: python -c "import json; d=json.load(open('/tmp/lint.json')); assert len(d['prompts']) == 6, d.keys()"
       - name: Quality gate on the good example
         run: python -m prompt_atlas score examples/support-agent.md --min-score 90 --no-color
       - name: Render the HTML report
