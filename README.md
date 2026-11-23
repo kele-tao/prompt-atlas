@@ -1,5 +1,7 @@
 # prompt-atlas
 
+**English** | [简体中文](README.zh-CN.md)
+
 Lint, score and diff LLM prompts like source code - one command, 20 rules, a
 deterministic 0-100 score, and a diff that tells you when a prompt edit is
 actually a behaviour change.
