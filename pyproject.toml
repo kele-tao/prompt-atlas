@@ -43,7 +43,7 @@ prompt_atlas = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = ["src", "."]
 addopts = "-ra"
 
 [tool.ruff]
